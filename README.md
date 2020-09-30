@@ -1,4 +1,6 @@
 
+This repo will host the template workflow files for the power platform based projects CI and CD.
+
 # Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a

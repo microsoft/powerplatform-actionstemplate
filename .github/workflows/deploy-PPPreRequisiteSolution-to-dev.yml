@@ -1,0 +1,186 @@
+name: Setting_Dev_Environment
+
+on:
+ repository_dispatch:
+   types: [setup-dev-env]
+
+jobs:
+  build:
+
+    env:
+     requestId: ${{ github.event.client_payload.requestid }}
+     solutions: ${{ github.event.client_payload.solutions }}
+     POWER_PLATFORM_ACTIONS_SECRET: ${{ secrets.POWER_PLATFORM_ACTIONS_SECRET }}
+     projectId: ${{ github.event.client_payload.projectid }}
+
+    runs-on: windows-latest
+
+    steps:
+    - name: 'clone this repo'
+      uses: actions/checkout@v2-beta
+
+    - name: "Prepare input configuration files"
+      run: |
+        $solutionsFromEvent = echo "${{ github.event.client_payload.solutions }}"
+        $solutionList = $solutionsFromEvent.Split(";")
+
+        echo "Creating Export Config File"
+        $exportJsonObj = @{}
+        echo "Solutions list from event: $solutionList"
+        $solutionObjs = [System.Collections.ArrayList]@()
+        foreach($solution in $solutionList) {
+          $solutionObj = @{}
+          $solutionObj."SolutionName" = "$solution"
+          $solutionObj."Managed" = "true"
+          $solutionObjs.Add($solutionObj)
+        }
+        $exportJsonObj."Solutions" = $solutionObjs
+        $exportJsonStr = ConvertTo-Json -InputObject $exportJsonObj
+        echo $exportJsonStr > exportConfigFile.json
+        echo "Created Export Config File"
+
+        echo ""
+        echo ""
+        echo "Creating Ixport Config File"
+        $importJsonObj = @{}
+        echo "Solutions list from event: $solutionList"
+        $solutionObjs = [System.Collections.ArrayList]@()
+        foreach($solution in $solutionList) {
+          $solutionObj = @{}
+          $solutionObj."SolutionName" = "$solution"
+          $solutionObj."SolutionFilePath" = "solutions\"+$solution+"_managed.zip"
+          $solutionObjs.Add($solutionObj)
+        }
+
+        $importJsonObj."Solutions" = $solutionObjs
+        $importJsonStr = ConvertTo-Json -InputObject $importJsonObj
+        echo $importJsonStr > importConfigFile.json
+        echo "Created Import Config File"
+
+    - name: "Reading the files for testing"
+      run: |
+        $exportContent = Get-Content exportConfigFile.json
+        echo "Export Data"
+        echo $exportContent
+
+        echo ""
+        echo ""
+        $importContent = Get-Content importConfigFile.json
+        echo "Import Data"
+        echo $importContent
+
+    - name: 'Power ALM Export action Checkout'
+      uses: actions/checkout@v2-beta
+      with:
+        repository: poweralm/export
+        ref: refs/heads/master
+        token: ${{ env.POWER_PLATFORM_ACTIONS_SECRET }}
+        path: .github/export
+
+    - name: 'Power ALM Import action Checkout'
+      uses: actions/checkout@v2-beta
+      with:
+        repository: poweralm/import
+        ref: refs/heads/master
+        token: ${{ env.POWER_PLATFORM_ACTIONS_SECRET }}
+        path: .github/import
+
+    - name: 'export the solutions'
+      id: exports
+      uses: ./.github/export
+      with:
+        connectionString: '${{ secrets.DEPENDENCIES_ENV_CONNECTION_STRING }}'
+        configFilePath: exportConfigFile.json
+        exportSolutionOutputPath: "solutions"
+
+    - name: 'import the solutions'
+      id: imports
+      uses: ./.github/import
+      with:
+        ConnectionString: '${{ secrets.DEV_ENV_CONNECTION_STRING }}'
+        ConfigFilePath: importConfigFile.json
+        logsDirectory: "logs"
+
+    - name: Set job status
+      if: always()
+      run: |
+        $importError = echo "${{ steps.imports.outputs.errorMessage }}"
+        $exportError = echo "${{ steps.exports.outputs.errorMessage }}"
+        $errors = @{
+          'ImportAction' = "$importError";
+          'ExportAction' = "$exportError"
+        }
+        $jobStatus = echo ${{ job.status }}
+        $workflow = echo ${{ github.workflow }}
+        $branch = ""
+        $repo = echo ${{ github.repository }}
+        $run = echo ${{ github.run_id }}
+        $requestId = echo ${{ env.requestId }}
+        $projectid = echo "${{ env.projectId }}"
+        $status = @{
+          'status' = $jobStatus;
+          'workflow' = "$workflow";
+          'branch' = $branch;
+          'repo' = $repo;
+          'run' = $run;
+          'requestid' = $requestId;
+          'projectid' = "$projectid";
+          'errors' = $errors
+        }
+        $jsonString = ConvertTo-Json -InputObject $status
+        $jsonString > status.json
+
+    - name: Update job status
+      if: always()
+      uses: actions/upload-artifact@v1
+      with:
+        name: job_status
+        path: status.json
+
+  notify:
+    needs: [build]
+    if: always()
+    runs-on: windows-latest
+    steps:
+
+    - name: Download artifact job_status
+      uses: actions/download-artifact@v1
+      with:
+        name: job_status
+      continue-on-error: true
+
+    - name: Reading status & Invoking the webhook
+      if: always()
+      run: |
+        $fileExists = Test-Path job_status/status.json -PathType Leaf
+        $uri = echo '${{ github.event.client_payload.webhookurl }}'
+        $jsonData = ''
+        if ($fileExists) {
+          $jsonData = Get-Content job_status/status.json
+          echo "Data read from status file :: " $jsonData
+        } else {
+          $workflow = echo ${{ github.workflow }}
+          $branch = ""
+          $repo = echo ${{ github.repository }}
+          $run = echo ${{ github.run_id }}
+          $requestId = echo ${{ github.event.client_payload.requestid }}
+          $projectid = echo "${{ github.event.client_payload.projectid }}"
+          $errors = @{
+            "Actions"="Unable to get the status file from the previous job"
+          }
+          $status = @{
+            'status' = "$fileExists";
+            'workflow' = "$workflow";
+            'branch' = $branch;
+            'repo' = $repo;
+            'run' = $run;
+            'requestid' = $requestId;
+            'projectid' = "$projectid"
+            'errors' = $errors
+          }
+          $jsonData = ConvertTo-Json -InputObject $status
+          echo "Data constructed as status.json file is not present :: " $jsonData
+        }
+        echo "Invoking the WebHook Url"
+        Invoke-RestMethod -Uri $uri -Body $jsonData  -Method POST -ContentType 'application/json'
+        echo "Invoked the WebHook Url"

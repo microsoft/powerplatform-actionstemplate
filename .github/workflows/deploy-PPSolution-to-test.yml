@@ -1,7 +1,7 @@
 name: Deploy To Test Environment
 
 # Currently triggering this workflow on custom events, using the api https://docs.github.com/en/rest/reference/repos#create-a-repository-dispatch-event
-# Can be easily changed to other events https://docs.github.com/en/free-pro-team@latest/actions/reference/events-that-trigger-workflows 
+# Can be easily changed to other events https://docs.github.com/en/free-pro-team@latest/actions/reference/events-that-trigger-workflows
 # NOTE: You have to change env variables with appropriate values, if you are modifying it.
 on:
  repository_dispatch:
@@ -56,19 +56,10 @@ jobs:
         echo "::set-env name=projectId::$($hashProperties.projectId)"
         echo "::set-env name=notes::$($hashProperties.notes)"
 
-    # This step will go away after the microsoft/powerplatform-actions repo becomes public.
-    - name: 'Power Platform Microsoft actions'
-      uses: actions/checkout@v2-beta
-      with:
-        repository: microsoft/powerplatform-actions
-        ref: refs/heads/main # will change later to refs/tags/v0.1.7
-        token: ${{ env.microsoftPowerPlatformActionsSecret }}
-        path: microsoft/powerplatform-actions
-        lfs: true
 
     - name: 'Export the solution from Dev (source) environment'
       id: export-dev
-      uses: ./microsoft/powerplatform-actions/export-solution
+      uses: microsoft/powerplatform-actions/export-solution@main
       with:
         user-name: ${{ env.sourceEnvironmentUserId }}
         password-secret: ${{ secrets[env.sourceEnvironmentSecretName] }}
@@ -78,14 +69,14 @@ jobs:
 
     - name: 'Unpack the exported solution'
       id: unpack-dev
-      uses: ./microsoft/powerplatform-actions/unpack-solution
+      uses: microsoft/powerplatform-actions/unpack-solution@main
       with:
         solution-file: "${{ env.solutionName }}.zip"
         solution-folder: "${{ env.solutionName }}"
 
     - name: 'Commit the unpacked solution to the topic branch'
       id: branch-solution
-      uses: ./microsoft/powerplatform-actions/branch-solution
+      uses: microsoft/powerplatform-actions/branch-solution@main
       with:
        solution-folder: "${{ env.solutionName }}"
        solution-target-folder: "${{ env.solutionName }}"
@@ -96,14 +87,14 @@ jobs:
 
     - name: 'Pack the solution for testing in build environment'
       id: pack-dev
-      uses: ./microsoft/powerplatform-actions/pack-solution
+      uses: microsoft/powerplatform-actions/pack-solution@main
       with:
         solution-folder: ${{env.solutionName}}
         solution-file: "${{env.solutionName}}_Unmanaged.zip"
 
     - name: 'Import the solution to Build Environment'
       id: import-build
-      uses: ./microsoft/powerplatform-actions/import-solution
+      uses: microsoft/powerplatform-actions/import-solution@main
       with:
         environment-url: ${{ env.buildEnvironmentUrl }}
         user-name: ${{ env.buildEnvironmentUserId }}
@@ -112,7 +103,7 @@ jobs:
 
     - name: 'Export the solution as managed from build environment'
       id: export-build
-      uses: ./microsoft/powerplatform-actions/export-solution
+      uses: microsoft/powerplatform-actions/export-solution@main
       with:
         user-name: ${{ env.buildEnvironmentUserId }}
         password-secret: ${{ secrets[env.buildEnvironmentSecretName] }}
@@ -123,7 +114,7 @@ jobs:
 
     - name: 'Import the managed solution to the Test (target) Environment'
       id: import-test
-      uses: ./microsoft/powerplatform-actions/import-solution
+      uses: microsoft/powerplatform-actions/import-solution@main
       with:
         environment-url: ${{ env.targetEnvironmentUrl }}
         user-name: ${{ env.targetEnvironmentUserId }}
@@ -158,7 +149,7 @@ jobs:
         $outCome = echo "${{ steps.unpack-dev.outcome }}"
         $errorMsg = echo "${{ steps.unpack-dev.outputs.errorMessage }}"
         Process-StepOutputs "unpack-dev" $outCome $errorMsg
-        
+
         $outCome = echo "${{ steps.pack-dev.outcome }}"
         $errorMsg = echo "${{ steps.pack-dev.outputs.errorMessage }}"
         Process-StepOutputs "pack-dev" $outCome $errorMsg
@@ -245,7 +236,7 @@ jobs:
             'run' = $run;
             'requestid' = $requestId;
             'projectid' = "$projectid";
-            'errors' = $errors
+            'errors' = "$errors"
           }
           $jsonData = ConvertTo-Json -InputObject $status
           echo "Data constructed as status.json file is not present :: " $jsonData

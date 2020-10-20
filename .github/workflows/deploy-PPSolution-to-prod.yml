@@ -1,12 +1,12 @@
 name: Deploy to Production Environment
 
 # Currently triggering this workflow on custom events, using the api https://docs.github.com/en/rest/reference/repos#create-a-repository-dispatch-event
-# Can be easily changed to other events https://docs.github.com/en/free-pro-team@latest/actions/reference/events-that-trigger-workflows 
+# Can be easily changed to other events https://docs.github.com/en/free-pro-team@latest/actions/reference/events-that-trigger-workflows
 # NOTE: You have to change env variables with appropriate values, if you are modifying it.
 on:
  repository_dispatch:
    types: [deploy_to_prod]
-   
+
 jobs:
   build:
 
@@ -26,16 +26,6 @@ jobs:
     - name: 'clone this repo'
       uses: actions/checkout@v2-beta
 
-    # This step will go away after the microsoft/powerplatform-actions repo becomes public.
-    - name: 'Power Platform Microsoft actions'
-      uses: actions/checkout@v2-beta
-      with:
-        repository: microsoft/powerplatform-actions
-        ref: refs/heads/main # will change later to refs/tags/v0.1.7
-        token: ${{ env.microsoftPowerPlatformActionsSecret }}
-        path: microsoft/powerplatform-actions
-        lfs: true
-
     - name: Download artifact
       uses: dawidd6/action-download-artifact@v2
       with:
@@ -45,7 +35,7 @@ jobs:
 
     - name: 'Import the managed solution to the Prod (target) Environment'
       id: import-test
-      uses: ./microsoft/powerplatform-actions/import-solution
+      uses: microsoft/powerplatform-actions/import-solution@main
       with:
         environment-url: ${{ env.targetEnvironmentUrl }}
         user-name: ${{ env.targetEnvironmentUserId }}
@@ -72,6 +62,7 @@ jobs:
         $run = echo ${{ github.run_id }}
         $requestId = echo ${{ env.requestId }}
         $projectid = echo "${{ env.projectId }}"
+        $errorStr = ConvertTo-Json -InputObject $errors
         $status = @{
           'status' = $jobStatus;
           'workflow' = "$workflow";
@@ -79,12 +70,13 @@ jobs:
           'run' = $run;
           'requestid' = $requestId;
           'projectid' = "$projectid"
-          'errors' = $errors
+          'errors' = "$errorStr"
         }
         $jsonString = ConvertTo-Json -InputObject $status
         $jsonString > status.json
 
     - name: Upload job status file as artifact
+      if: always()
       uses: actions/upload-artifact@v1
       with:
         name: job_status
@@ -122,6 +114,7 @@ jobs:
           $errors = @{
             "Actions"="Unable to get the status file from the previous job"
           }
+          $errorStr = ConvertTo-Json -InputObject $errors
           $status = @{
             'status' = "$fileExists";
             'workflow' = "$workflow";
@@ -130,7 +123,7 @@ jobs:
             'run' = $run;
             'requestid' = $requestId;
             'projectid' = "$projectid";
-            'errors' = $errors
+            'errors' = "$errorStr"
           }
           $jsonData = ConvertTo-Json -InputObject $status
           echo "Data constructed as status.json file is not present :: " $jsonData

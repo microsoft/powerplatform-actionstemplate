@@ -26,8 +26,6 @@ jobs:
      buildEnvironmentUrl: ${{ github.event.client_payload.buildenvironmenturl }}
      requestId: ${{ github.event.client_payload.requestid }}
      projectId: ${{ github.event.client_payload.projectid }}
-     # this will go away once the repo:microsoft/powerplatform-actions is public
-     microsoftPowerPlatformActionsSecret: ${{ secrets.POWER_PLATFORM_ACTIONS_SECRET }}
 
     runs-on: windows-2019
 
@@ -49,17 +47,17 @@ jobs:
           $hashProperties[$property.Name] = $property.Value
         }
 
-        echo "::set-env name=buildEnvironmentUserId::$($hashProperties.buildenvironmentuserid)"
-        echo "::set-env name=buildEnvironmentSecretName::$($hashProperties.buildenvironmentsecretname)"
-        echo "::set-env name=buildEnvironmentUrl::$($hashProperties.buildenvironmenturl)"
-        echo "::set-env name=requestId::$($hashProperties.requestid)"
-        echo "::set-env name=projectId::$($hashProperties.projectId)"
-        echo "::set-env name=notes::$($hashProperties.notes)"
+        echo "buildEnvironmentUserId=$($hashProperties.buildenvironmentuserid)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        echo "buildEnvironmentSecretName=$($hashProperties.buildenvironmentsecretname)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        echo "buildEnvironmentUrl=$($hashProperties.buildenvironmenturl)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        echo "requestId=$($hashProperties.requestid)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        echo "projectId=$($hashProperties.projectId)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        echo "notes=$($hashProperties.notes)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
 
     - name: 'Export the solution from Dev (source) environment'
       id: export-dev
-      uses: microsoft/powerplatform-actions/export-solution@main
+      uses: microsoft/powerplatform-actions/export-solution@v0.1.8
       with:
         user-name: ${{ env.sourceEnvironmentUserId }}
         password-secret: ${{ secrets[env.sourceEnvironmentSecretName] }}
@@ -69,14 +67,14 @@ jobs:
 
     - name: 'Unpack the exported solution'
       id: unpack-dev
-      uses: microsoft/powerplatform-actions/unpack-solution@main
+      uses: microsoft/powerplatform-actions/unpack-solution@v0.1.8
       with:
         solution-file: "${{ env.solutionName }}.zip"
         solution-folder: "${{ env.solutionName }}"
 
     - name: 'Commit the unpacked solution to the topic branch'
       id: branch-solution
-      uses: microsoft/powerplatform-actions/branch-solution@main
+      uses: microsoft/powerplatform-actions/branch-solution@v0.1.8
       with:
        solution-folder: "${{ env.solutionName }}"
        solution-target-folder: "${{ env.solutionName }}"
@@ -87,34 +85,34 @@ jobs:
 
     - name: 'Pack the solution for testing in build environment'
       id: pack-dev
-      uses: microsoft/powerplatform-actions/pack-solution@main
+      uses: microsoft/powerplatform-actions/pack-solution@v0.1.8
       with:
         solution-folder: ${{env.solutionName}}
         solution-file: "${{env.solutionName}}_Unmanaged.zip"
 
     - name: 'Import the solution to Build Environment'
       id: import-build
-      uses: microsoft/powerplatform-actions/import-solution@main
+      uses: microsoft/powerplatform-actions/import-solution@v0.1.8
       with:
-        environment-url: ${{ env.buildEnvironmentUrl }}
-        user-name: ${{ env.buildEnvironmentUserId }}
+        environment-url: ${{env.buildEnvironmentUrl}}
+        user-name: ${{env.buildEnvironmentUserId}}
         password-secret: ${{ secrets[env.buildEnvironmentSecretName] }}
         solution-file: "${{env.solutionName}}_Unmanaged.zip"
 
     - name: 'Export the solution as managed from build environment'
       id: export-build
-      uses: microsoft/powerplatform-actions/export-solution@main
+      uses: microsoft/powerplatform-actions/export-solution@v0.1.8
       with:
-        user-name: ${{ env.buildEnvironmentUserId }}
+        user-name: ${{env.buildEnvironmentUserId}}
         password-secret: ${{ secrets[env.buildEnvironmentSecretName] }}
         solution-name: ${{ env.solutionName }}
-        environment-url: ${{ env.buildEnvironmentUrl }}
+        environment-url: ${{env.buildEnvironmentUrl}}
         managed: 'true'
         solution-output-file: "${{ env.solutionName }}_managed.zip"
 
     - name: 'Import the managed solution to the Test (target) Environment'
       id: import-test
-      uses: microsoft/powerplatform-actions/import-solution@main
+      uses: microsoft/powerplatform-actions/import-solution@v0.1.8
       with:
         environment-url: ${{ env.targetEnvironmentUrl }}
         user-name: ${{ env.targetEnvironmentUserId }}
@@ -136,8 +134,10 @@ jobs:
           if ($outcome -eq "success" -or $outcome -eq "skipped") {
             return ""
           } else {
-            if ($null -ne $errorMessage -or $errorMessage -ne "") {
+            if ($null -ne $errorMessage -and $errorMessage -ne "") {
               $errors["$stepName"] = $errorMessage
+            } else {
+              $errors["$stepName"] = "Error occured in GitHub action $stepName"
             }
           }
         }
@@ -171,8 +171,8 @@ jobs:
         $branch = echo ${{ env.branchName }}
         $repo = echo ${{ github.repository }}
         $run = echo ${{ github.run_id }}
-        $requestId = echo ${{ env.requestId }}
-        $projectid = echo "${{ env.projectId }}"
+        $requestId = echo "${{env.requestId}}"
+        $projectid = echo "${{env.projectId}}"
         $errorStr = ConvertTo-Json -InputObject $errors
         $status = @{
           'status' = $jobStatus;

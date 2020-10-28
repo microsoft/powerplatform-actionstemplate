@@ -1,0 +1,151 @@
+name: Deploy solution to dev environment
+
+# Triggering this workflow on custom event "setup-dev-env"
+# This workflow will import the "Managed" solution from source(prod) environment to target(dev) environment
+# It is used to set up the dev environment from prod like environment.
+
+on:
+ repository_dispatch:
+   types: [setup-dev-env]
+
+jobs:
+  build:
+
+    env:
+     solutionName: ${{ github.event.client_payload.solutionname }}
+     sourcepasswordsecretname: ${{ github.event.client_payload.sourcepasswordsecretname }}
+     sourceusername: ${{ github.event.client_payload.sourceusername }}
+     sourceenvironmentUrl: ${{ github.event.client_payload.sourceenvironmenturl }}
+     targetpasswordsecretname: ${{ github.event.client_payload.targetpasswordsecretname }}
+     targetusername: ${{ github.event.client_payload.targetusername }}
+     targetenvironmentUrl: ${{ github.event.client_payload.targetenvironmenturl }}
+     webhookUrl: ${{ github.event.client_payload.webhookurl }}
+     requestid: ${{ github.event.client_payload.requestid }}
+     projectid: ${{ github.event.client_payload.projectid }}
+
+    runs-on: windows-2019
+
+    steps:
+    - name: 'Export the solution from source environment'
+      id: export-from-source
+      uses: microsoft/powerplatform-actions/export-solution@v0.1.8
+      with:
+        user-name: ${{ env.sourceusername }}
+        password-secret: ${{ secrets[env.sourcepasswordsecretname] }}
+        solution-name: ${{ env.solutionName }}
+        environment-url: ${{ env.sourceenvironmenturl }}
+        managed: 'true'
+        solution-output-file: "${{ env.solutionName }}_managed.zip"
+
+    - name: 'Import the solution to Target Environment'
+      id: import-to-target
+      uses: microsoft/powerplatform-actions/import-solution@v0.1.8
+      with:
+        environment-url: ${{ env.targetenvironmenturl }}
+        user-name: ${{ env.targetusername }}
+        password-secret: ${{ secrets[env.targetpasswordsecretname] }}
+        solution-file: "${{env.solutionName}}_managed.zip"
+
+    - name: Set job status
+      if: always()
+      run: |
+        $errors=@{}
+        function Process-StepOutputs($stepName, $outCome, $errorMessage) {
+          if ($outcome -eq "success" -or $outcome -eq "skipped") {
+            return ""
+          } else {
+            if ($null -ne $errorMessage -and $errorMessage -ne "") {
+              $errors["$stepName"] = $errorMessage
+            }
+          }
+        }
+
+        $outCome = echo "${{ steps.import-to-target.outcome }}"
+        $errorMsg = echo "${{ steps.import-to-target.outputs.errorMessage }}"
+        Process-StepOutputs "import-to-target" $outCome $errorMsg
+
+        $outCome = echo "${{ steps.export-from-source.outcome }}"
+        $errorMsg = echo "${{ steps.export-from-source.outputs.errorMessage }}"
+        Process-StepOutputs "export-from-source" $outCome $errorMsg
+
+        $jobStatus = echo ${{ job.status }}
+        $workflow = echo ${{ github.workflow }}
+        $branch = ""
+        $repo = echo ${{ github.repository }}
+        $run = echo ${{ github.run_id }}
+        $requestId = echo ${{ env.requestId }}
+        $projectid = echo "${{ env.projectId }}"
+        $solutionName = echo "${{ env.solutionName }}"
+        $errorStr = ConvertTo-Json -InputObject $errors
+        $status = @{
+          'status' = $jobStatus;
+          'workflow' = "$workflow";
+          'branch' = $branch;
+          'repo' = $repo;
+          'run' = $run;
+          'requestid' = $requestId;
+          'projectid' = "$projectid";
+          'errors' = "$errorStr";
+          'solutionname' = "$solutionName"
+        }
+        $jsonString = ConvertTo-Json -InputObject $status
+        $jsonString > status.json
+
+    - name: Upload job status file as artifact
+      if: always()
+      uses: actions/upload-artifact@v1
+      with:
+        name: job_status
+        path: status.json
+
+  # This job is to notify the webhook url when the workflow is triggered on the custom event and the payload has the webhook url.
+  # Otherwise this job can be ignored.
+  notify:
+    needs: [build]
+    if: always()
+    runs-on: windows-latest
+    steps:
+
+    - name: Download artifact job_status
+      uses: actions/download-artifact@v1
+      with:
+        name: job_status
+      continue-on-error: true
+
+    - name: Reading status & Invoking the webhook
+      if: always()
+      run: |
+        $fileExists = Test-Path job_status/status.json -PathType Leaf
+        $uri = echo '${{ github.event.client_payload.webhookurl }}'
+        $jsonData = ''
+        if ($fileExists) {
+          $jsonData = Get-Content job_status/status.json
+          echo "Data read from status file :: " $jsonData
+        } else {
+          $workflow = echo ${{ github.workflow }}
+          $branch = ""
+          $repo = echo ${{ github.repository }}
+          $run = echo ${{ github.run_id }}
+          $requestId = echo ${{ github.event.client_payload.requestid }}
+          $projectid = echo "${{ github.event.client_payload.projectid }}"
+          $errors = @{
+            "Actions"="Unable to get the status file from the previous job"
+          }
+          $solutionName = echo "${{ github.event.client_payload.solutionname }}"
+          $status = @{
+            'status' = "$fileExists";
+            'workflow' = "$workflow";
+            'branch' = $branch;
+            'repo' = $repo;
+            'run' = $run;
+            'requestid' = $requestId;
+            'projectid' = "$projectid";
+            'errors' = "$errors";
+            'solutionname' = "$solutionName"
+          }
+          $jsonData = ConvertTo-Json -InputObject $status
+          echo "Data constructed as status.json file is not present :: " $jsonData
+        }
+        echo "Invoking the WebHook Url"
+        Invoke-RestMethod -Uri $uri -Body $jsonData  -Method POST -ContentType 'application/json'
+        echo "Invoked the WebHook Url"

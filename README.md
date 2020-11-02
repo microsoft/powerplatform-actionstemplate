@@ -10,7 +10,7 @@ Users can create a new power platform based project using this template repo, mo
 
 # Issues
 
-If you find any bugs/feedback when using the yml files, please file an issue in our (GitHub issues)[https://github.com/microsoft/powerplatform-actionstemplate/issues] page. 
+If you find any bugs/feedback when using the yml files, please file an issue in our [GitHub issues](https://github.com/microsoft/powerplatform-actionstemplate/issues) page.
 
 
 # Contributing

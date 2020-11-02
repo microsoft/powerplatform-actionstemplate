@@ -1,5 +1,17 @@
+# Overview
 
-This repo will host the template workflow files for the power platform based projects CI and CD.
+This repo will host the workflow files for Continuous Integration(CI) & Continuous Deployment(CD) of the power platform [solutions](https://docs.microsoft.com/en-us/powerapps/maker/common-data-service/solutions-overview).
+
+These workflow will use the actions in the [microsoft/powerplatform-actions](https://github.com/microsoft/powerplatform-actions) to interact with the power platform environment.
+
+# Usage
+
+Users can create a new power platform based project using this template repo, more details [here](https://docs.github.com/en/free-pro-team@latest/github/creating-cloning-and-archiving-repositories/creating-a-repository-from-a-template) on how to create repository using template repository.
+
+# Issues
+
+If you find any bugs/feedback when using the yml files, please file an issue in our (GitHub issues)[https://github.com/microsoft/powerplatform-actionstemplate/issues] page. 
+
 
 # Contributing
 

@@ -9,3 +9,6 @@ More details on workflows in this [wiki](https://github.com/microsoft/powerplatf
 Workflows mainly uses the [microsoft/powerplatform-actions](https://github.com/microsoft/powerplatform-actions).
 
 For triggering workflow manually you can follow this [documentation](https://docs.github.com/en/free-pro-team@latest/rest/reference/repos#create-a-repository-dispatch-event).
+
+
+**NOTE:** This will be used temporarily until, the third party access is allowed for the required apps in microsoft org for repo powerplatform-actionstemplate.

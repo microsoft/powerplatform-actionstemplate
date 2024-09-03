@@ -204,7 +204,7 @@ jobs:
     steps:
 
     - name: Download artifact job_status
-      uses: actions/download-artifact@v1
+      uses: actions/download-artifact@v4.1.7
       with:
         name: job_status
       continue-on-error: true
